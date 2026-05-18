@@ -5,38 +5,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { CARAGA_CEMETERIES } from '@/lib/constants/cemeteries'
+import { PLOTS } from '@/lib/constants/plots'
 import Footer from '@/components/Footer'
-
-const PLOTS = [
-  {
-    id: 'p1',
-    name: 'Premium Estate',
-    description: 'Located under the heritage Oak tree with private granite bench.',
-    price: 450000,
-    badge: 'Most Selected',
-  },
-  {
-    id: 'p2',
-    name: 'Serenity Path',
-    description: 'East-facing plots bordering the central reflecting pool.',
-    price: 280000,
-    badge: null,
-  },
-  {
-    id: 'p3',
-    name: 'Celestial Garden',
-    description: 'Open lawns with garden view and morning sunlight exposure.',
-    price: 185000,
-    badge: null,
-  },
-  {
-    id: 'p4',
-    name: 'Heritage Row',
-    description: 'Adjacent to the founding family section with cobblestone pathways.',
-    price: 125000,
-    badge: 'Budget Friendly',
-  },
-]
 
 export default function BookingPage() {
   const searchParams = useSearchParams()
@@ -120,7 +90,7 @@ export default function BookingPage() {
             <div>
               <h2 className="text-2xl font-semibold text-primary mb-4">1. Select Cemetery</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                {CARAGA_CEMETERIES.slice(0, 4).map((c) => (
+                {CARAGA_CEMETERIES.map((c) => (
                   <button
                     key={c.id}
                     onClick={() => setSelectedCemId(c.id)}

@@ -43,15 +43,27 @@ export interface Booking {
   id: string
   user_id: string
   cemetery_id: string
-  plot_id: string
-  deceased_name: string
-  deceased_date_of_passing: string
-  special_requests: string
+  plot_id?: string
+  plot_type?: string
+  deceased_name?: string
+  date_of_birth?: string
+  date_of_passing?: string
+  special_requests?: string
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled'
   total_amount: number
-  downpayment_amount: number
-  payment_method: string
-  payment_status: 'unpaid' | 'partial' | 'paid'
+  deposit_paid?: number
+  downpayment_amount?: number
+  payment_method?: string
+  payment_status?: 'unpaid' | 'partial' | 'paid'
+  contact_name?: string
+  contact_email?: string
+  contact_phone?: string
+  contact_address?: string
+  relationship?: string
+  reference_code?: string
+  interment_date?: string
+  preferred_time?: string
+  service_ids?: string[]
   created_at: string
   updated_at: string
   cemetery?: Cemetery
@@ -62,10 +74,25 @@ export interface Booking {
 export interface Profile {
   id: string
   full_name: string
-  phone_number: string
+  email?: string
+  phone?: string
+  phone_number?: string
+  location?: string
+  role?: 'user' | 'admin'
   avatar_url: string
   created_at: string
   updated_at: string
+}
+
+export interface SupportMessage {
+  id: string
+  user_id: string
+  sender_id: string
+  sender_role: 'user' | 'admin'
+  body: string
+  read_by_user: boolean
+  read_by_admin: boolean
+  created_at: string
 }
 
 export interface MemorialRecord {

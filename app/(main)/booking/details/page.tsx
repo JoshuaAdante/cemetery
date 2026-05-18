@@ -37,6 +37,16 @@ export default function BookingDetailsPage() {
   const handle = (field: string, value: string) => setForm((f) => ({ ...f, [field]: value }))
 
   const handleContinue = () => {
+    sessionStorage.setItem(
+      'bookingDraft',
+      JSON.stringify({
+        cemetery: cemeteryId,
+        plot: plotId,
+        price,
+        ...form,
+      })
+    )
+
     const params = new URLSearchParams({
       cemetery: cemeteryId,
       plot: plotId,

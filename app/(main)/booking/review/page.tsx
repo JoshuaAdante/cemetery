@@ -1,17 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Footer from '@/components/Footer'
 import { CARAGA_CEMETERIES, SERVICES } from '@/lib/constants/cemeteries'
-
-const PLOT_NAMES: Record<string, string> = {
-  p1: 'Premium Estate',
-  p2: 'Serenity Path',
-  p3: 'Celestial Garden',
-  p4: 'Heritage Row',
-}
+import { PLOT_NAMES } from '@/lib/constants/plots'
 
 export default function BookingReviewPage() {
   const searchParams = useSearchParams()
@@ -34,8 +28,20 @@ export default function BookingReviewPage() {
     expiry: '',
     cvv: '',
   })
+  const [bookingDraft, setBookingDraft] = useState<Record<string, string> | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    const rawDraft = sessionStorage.getItem('bookingDraft')
+    if (!rawDraft) return
+
+    try {
+      setBookingDraft(JSON.parse(rawDraft))
+    } catch {
+      setBookingDraft(null)
+    }
+  }, [])
 
   const handle = (field: string, value: string) => setCardForm((f) => ({ ...f, [field]: value }))
 
@@ -77,10 +83,24 @@ export default function BookingReviewPage() {
         total_amount: total,
         deposit_paid: 10000,
         service_ids: serviceIds,
+        interment_date: bookingDraft?.intermentDate || null,
+        preferred_time: bookingDraft?.preferredTime || null,
+        deceased_name: bookingDraft?.deceasedName || null,
+        date_of_birth: bookingDraft?.dateOfBirth || null,
+        date_of_passing: bookingDraft?.dateOfPassing || null,
+        place_of_birth: bookingDraft?.placeOfBirth || null,
+        religion: bookingDraft?.religion || null,
+        obituary: bookingDraft?.obituary || null,
+        contact_name: bookingDraft?.fullName || user.user_metadata?.full_name || null,
+        contact_email: bookingDraft?.email || user.email || null,
+        contact_phone: bookingDraft?.phone || null,
+        contact_address: bookingDraft?.address || null,
+        relationship: bookingDraft?.relationship || null,
       })
 
       if (dbError) throw dbError
 
+      sessionStorage.removeItem('bookingDraft')
       router.push('/profile?tab=bookings&success=1')
     } catch (err: any) {
       setError(err.message || 'Something went wrong. Please try again.')

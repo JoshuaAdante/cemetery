@@ -12,21 +12,31 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   full_name TEXT,
+  email TEXT,
   phone TEXT,
   location TEXT DEFAULT 'Butuan City, Caraga',
   avatar_url TEXT,
+  role TEXT CHECK (role IN ('user', 'admin')) DEFAULT 'user',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS role TEXT CHECK (role IN ('user', 'admin')) DEFAULT 'user';
 
 -- Trigger to auto-create profile on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, full_name, avatar_url)
+  INSERT INTO public.profiles (id, full_name, email, role, avatar_url)
   VALUES (
     NEW.id,
     NEW.raw_user_meta_data->>'full_name',
+    NEW.email,
+    CASE
+      WHEN LOWER(NEW.email) = 'admin@cemetery.com' THEN 'admin'
+      ELSE 'user'
+    END,
     NEW.raw_user_meta_data->>'avatar_url'
   );
   RETURN NEW;
@@ -138,8 +148,35 @@ CREATE TABLE IF NOT EXISTS public.memorial_records (
 );
 
 -- ============================================================
+-- SUPPORT MESSAGES (admin <-> user local support)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.messages (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  sender_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  sender_role TEXT CHECK (sender_role IN ('user', 'admin')) NOT NULL,
+  body TEXT NOT NULL,
+  read_by_user BOOLEAN DEFAULT FALSE,
+  read_by_admin BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================
 -- ROW LEVEL SECURITY
 -- ============================================================
+
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN LOWER(COALESCE(auth.jwt()->>'email', '')) = 'admin@cemetery.com'
+    OR EXISTS (
+    SELECT 1
+    FROM public.profiles
+    WHERE id = auth.uid()
+      AND role = 'admin'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Profiles: users can only read/update their own profile
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
@@ -148,9 +185,19 @@ CREATE POLICY "Users can view own profile"
   ON public.profiles FOR SELECT
   USING (auth.uid() = id);
 
+CREATE POLICY "Admins can view all profiles"
+  ON public.profiles FOR SELECT
+  USING (public.is_admin());
+
 CREATE POLICY "Users can update own profile"
   ON public.profiles FOR UPDATE
-  USING (auth.uid() = id);
+  USING (auth.uid() = id)
+  WITH CHECK (auth.uid() = id AND COALESCE(role, 'user') = 'user');
+
+CREATE POLICY "Admins can update profiles"
+  ON public.profiles FOR UPDATE
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
 
 -- Cemeteries: public read
 ALTER TABLE public.cemeteries ENABLE ROW LEVEL SECURITY;
@@ -183,6 +230,10 @@ CREATE POLICY "Users can view own bookings"
   ON public.bookings FOR SELECT
   USING (auth.uid() = user_id);
 
+CREATE POLICY "Admins can view all bookings"
+  ON public.bookings FOR SELECT
+  USING (public.is_admin());
+
 CREATE POLICY "Users can create bookings"
   ON public.bookings FOR INSERT
   WITH CHECK (auth.uid() = user_id);
@@ -190,6 +241,10 @@ CREATE POLICY "Users can create bookings"
 CREATE POLICY "Users can update own bookings"
   ON public.bookings FOR UPDATE
   USING (auth.uid() = user_id AND status IN ('pending'));
+
+CREATE POLICY "Admins can update all bookings"
+  ON public.bookings FOR UPDATE
+  USING (public.is_admin());
 
 -- Memorial Records: users can view and manage their own records
 ALTER TABLE public.memorial_records ENABLE ROW LEVEL SECURITY;
@@ -205,6 +260,24 @@ CREATE POLICY "Users can create memorial records"
 CREATE POLICY "Users can update own memorial records"
   ON public.memorial_records FOR UPDATE
   USING (auth.uid() = user_id);
+
+-- Messages: users can chat only with admin on their own thread; admins can see all
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own messages"
+  ON public.messages FOR SELECT
+  USING (auth.uid() = user_id OR public.is_admin());
+
+CREATE POLICY "Users can send own support messages"
+  ON public.messages FOR INSERT
+  WITH CHECK (
+    (auth.uid() = user_id AND auth.uid() = sender_id AND sender_role = 'user')
+    OR public.is_admin()
+  );
+
+CREATE POLICY "Users can mark own messages read"
+  ON public.messages FOR UPDATE
+  USING (auth.uid() = user_id OR public.is_admin());
 
 -- ============================================================
 -- UPDATED_AT trigger helper

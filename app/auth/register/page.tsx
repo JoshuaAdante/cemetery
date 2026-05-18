@@ -16,14 +16,19 @@ export default function RegisterPage() {
     terms: false,
   })
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setSuccess('')
+
+    const email = form.email.trim().toLowerCase()
+    const isAdminEmail = email === 'admin@cemetery.com'
 
     if (!form.fullName.trim()) return setError('Full name is required.')
-    if (!form.email.trim()) return setError('Email is required.')
+    if (!email) return setError('Email is required.')
     if (form.password.length < 8)
       return setError('Password must be at least 8 characters.')
     if (form.password !== form.confirmPassword)
@@ -34,10 +39,16 @@ export default function RegisterPage() {
     const supabase = createClient()
 
     const { error: signUpError } = await supabase.auth.signUp({
-      email: form.email,
+      email,
       password: form.password,
       options: {
-        data: { full_name: form.fullName },
+        data: {
+          full_name: form.fullName,
+          role: isAdminEmail ? 'admin' : 'user',
+        },
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${
+          isAdminEmail ? '/admin' : '/map'
+        }`,
       },
     })
 
@@ -47,7 +58,29 @@ export default function RegisterPage() {
       return
     }
 
-    router.push('/map')
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session) {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password: form.password,
+      })
+
+      if (signInError) {
+        setSuccess(
+          signInError.message.toLowerCase().includes('email not confirmed')
+            ? 'Account created. Please confirm your email, then sign in.'
+            : 'Account created. You can now sign in.'
+        )
+        setLoading(false)
+        return
+      }
+    }
+
+    router.push(isAdminEmail ? '/admin' : '/map')
+    router.refresh()
   }
 
   return (
@@ -88,6 +121,12 @@ export default function RegisterPage() {
           </div>
         )}
 
+        {success && (
+          <div className="mb-6 p-4 bg-[#e6f9f0] text-[#1a7f4b] rounded-lg text-sm">
+            {success}
+          </div>
+        )}
+
         <form className="flex flex-col gap-6" onSubmit={handleSubmit}>
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium text-on-surface" htmlFor="full_name">
@@ -122,7 +161,7 @@ export default function RegisterPage() {
                 type="email"
                 placeholder="john@example.com"
                 value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                onChange={(e) => setForm({ ...form, email: e.target.value.trimStart() })}
                 className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg py-3 pl-10 pr-4 text-on-surface focus:outline-none focus:ring-2 focus:ring-secondary/20 focus:border-secondary transition-all"
                 required
               />

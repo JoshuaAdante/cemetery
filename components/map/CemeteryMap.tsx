@@ -25,13 +25,6 @@ function createCustomIcon(isSelected: boolean, type: string) {
   const color = isSelected ? '#156968' : '#172839'
   const size = isSelected ? 44 : 36
 
-  const svgIcon = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size + 8}" viewBox="0 0 ${size} ${size + 8}">
-      <circle cx="${size / 2}" cy="${size / 2}" r="${size / 2 - 2}" fill="${color}" stroke="white" stroke-width="3"/>
-      <text x="${size / 2}" y="${size / 2 + 6}" text-anchor="middle" fill="white" font-family="Material Symbols Outlined" font-size="16">location_on</text>
-    </svg>
-  `
-
   return L.divIcon({
     html: `
       <div style="
@@ -89,6 +82,21 @@ export default function CemeteryMap({
     // Custom zoom control (top-right)
     L.control.zoom({ position: 'topright' }).addTo(map)
 
+    mapRef.current = map
+
+    return () => {
+      map.remove()
+      mapRef.current = null
+      markersRef.current = {}
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!mapRef.current) return
+
+    Object.values(markersRef.current).forEach((marker) => marker.remove())
+    markersRef.current = {}
+
     // Add markers for each cemetery
     cemeteries.forEach((cemetery) => {
       const isSelected = cemetery.id === selectedId
@@ -135,18 +143,10 @@ export default function CemeteryMap({
         onSelectCemetery?.(cemetery)
       })
 
-      marker.addTo(map)
+      marker.addTo(mapRef.current!)
       markersRef.current[cemetery.id] = marker
     })
-
-    mapRef.current = map
-
-    return () => {
-      map.remove()
-      mapRef.current = null
-      markersRef.current = {}
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cemeteries, onSelectCemetery, selectedId])
 
   // Update markers when selection changes
   useEffect(() => {

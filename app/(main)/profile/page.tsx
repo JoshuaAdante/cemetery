@@ -5,6 +5,9 @@ import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { User } from '@supabase/supabase-js'
 import Footer from '@/components/Footer'
+import { Booking } from '@/types'
+import { CARAGA_CEMETERIES } from '@/lib/constants/cemeteries'
+import { getPlotName } from '@/lib/constants/plots'
 
 type Tab = 'profile' | 'bookings' | 'records'
 
@@ -54,6 +57,7 @@ export default function ProfilePage() {
   const defaultTab = (searchParams.get('tab') as Tab) || 'profile'
   const [activeTab, setActiveTab] = useState<Tab>(defaultTab)
   const [user, setUser] = useState<User | null>(null)
+  const [bookings, setBookings] = useState<Booking[]>([])
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [successMsg, setSuccessMsg] = useState(
@@ -78,6 +82,14 @@ export default function ProfilePage() {
           phone: user.user_metadata?.phone || '',
           location: user.user_metadata?.location || 'Butuan City, Caraga',
         })
+
+        const { data } = await supabase
+          .from('bookings')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+
+        setBookings((data || []) as Booking[])
       }
     }
     getUser()
@@ -266,7 +278,7 @@ export default function ProfilePage() {
         {/* Bookings Tab */}
         {activeTab === 'bookings' && (
           <div className="flex flex-col gap-6">
-            {MOCK_BOOKINGS.length === 0 ? (
+            {bookings.length === 0 ? (
               <div className="text-center py-20 bg-surface-container-lowest rounded-xl border border-outline-variant">
                 <span className="material-symbols-outlined text-5xl text-on-surface-variant block mb-4">
                   calendar_month
@@ -274,7 +286,11 @@ export default function ProfilePage() {
                 <p className="text-on-surface-variant">No bookings yet.</p>
               </div>
             ) : (
-              MOCK_BOOKINGS.map((b) => (
+              bookings.map((b) => {
+                const cemetery = CARAGA_CEMETERIES.find((c) => c.id === b.cemetery_id)
+                const plotName = getPlotName(b.plot_type || b.plot_id)
+
+                return (
                 <div
                   key={b.id}
                   className="bg-surface-container-lowest p-6 rounded-xl border border-outline-variant shadow-sm"
@@ -282,7 +298,9 @@ export default function ProfilePage() {
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
                     <div>
                       <div className="flex items-center gap-3 mb-1">
-                        <h3 className="font-bold text-primary">{b.cemetery}</h3>
+                        <h3 className="font-bold text-primary">
+                          {cemetery?.name || b.cemetery_id}
+                        </h3>
                         <span
                           className={`text-xs px-3 py-1 rounded-full font-medium capitalize ${
                             STATUS_STYLES[b.status]
@@ -291,19 +309,23 @@ export default function ProfilePage() {
                           {b.status}
                         </span>
                       </div>
-                      <p className="text-sm text-on-surface-variant">{b.plot}</p>
+                      <p className="text-sm text-on-surface-variant">{plotName}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-xl font-bold text-primary">
-                        ₱{b.amount.toLocaleString()}
+                        PHP {Number(b.total_amount || 0).toLocaleString()}
                       </p>
-                      <p className="text-xs text-on-surface-variant">Ref: {b.reference}</p>
+                      <p className="text-xs text-on-surface-variant">
+                        Ref: {b.reference_code || b.id.slice(0, 8)}
+                      </p>
                     </div>
                   </div>
                   <div className="border-t border-outline-variant pt-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                     <div className="flex items-center gap-2 text-sm text-on-surface-variant">
                       <span className="material-symbols-outlined text-sm">calendar_month</span>
-                      Scheduled: {new Date(b.date).toLocaleDateString('en-PH', { dateStyle: 'long' })}
+                      {b.interment_date
+                        ? `Scheduled: ${new Date(b.interment_date).toLocaleDateString('en-PH', { dateStyle: 'long' })}`
+                        : `Booked: ${new Date(b.created_at).toLocaleDateString('en-PH', { dateStyle: 'long' })}`}
                     </div>
                     <div className="flex gap-3">
                       <button className="text-sm text-secondary hover:underline">
@@ -315,7 +337,8 @@ export default function ProfilePage() {
                     </div>
                   </div>
                 </div>
-              ))
+                )
+              })
             )}
           </div>
         )}

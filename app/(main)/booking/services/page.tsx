@@ -40,11 +40,11 @@ export default function BookingServicesPage() {
   }
 
   const serviceIcons: Record<string, string> = {
-    chapel: 'church',
-    floral: 'local_florist',
-    digital: 'cloud',
-    livestream: 'videocam',
-    blessing: 'self_improvement',
+    s1: 'church',
+    s2: 'local_florist',
+    s3: 'cloud',
+    s4: 'videocam',
+    s5: 'self_improvement',
   }
 
   return (
@@ -165,7 +165,7 @@ export default function BookingServicesPage() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      setSelectedServices(['chapel', 'floral', 'digital'])
+                      setSelectedServices(['s1', 's2', 's3'])
                     }}
                     className="bg-secondary-container text-on-secondary-container px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
                   >

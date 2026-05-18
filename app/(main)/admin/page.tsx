@@ -52,10 +52,11 @@ export default function AdminPage() {
   const [messages, setMessages] = useState<SupportMessage[]>([])
   const [selectedUserId, setSelectedUserId] = useState('')
   const selectedUserIdRef = useRef('')
+  const chatEndRef = useRef<HTMLDivElement>(null)
+  const [conversationSearch, setConversationSearch] = useState('')
   const [reply, setReply] = useState('')
   const [isSending, setIsSending] = useState(false)
 
-  const selectedUser = profiles.find((profile) => profile.id === selectedUserId)
   const selectedMessages = messages.filter((message) => message.user_id === selectedUserId)
 
   const loadDashboard = async () => {
@@ -111,7 +112,10 @@ export default function AdminPage() {
     setMessages((messagesResult.data || []) as SupportMessage[])
 
     if (!selectedUserIdRef.current && profileRows.length > 0) {
-      setSelectedUserId(profileRows.find((profile) => profile.role !== 'admin')?.id || profileRows[0].id)
+      const firstUser =
+        profileRows.find((profile) => profile.role !== 'admin')?.id || profileRows[0].id
+      selectedUserIdRef.current = firstUser
+      setSelectedUserId(firstUser)
     }
 
     setIsLoading(false)
@@ -137,7 +141,19 @@ export default function AdminPage() {
       .eq('sender_role', 'user')
       .eq('read_by_admin', false)
       .then(() => undefined)
+
+    setMessages((current) =>
+      current.map((message) =>
+        message.user_id === selectedUserId && message.sender_role === 'user'
+          ? { ...message, read_by_admin: true }
+          : message
+      )
+    )
   }, [selectedUserId, isAdmin])
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [selectedMessages.length, selectedUserId])
 
   const stats = useMemo(() => {
     const totalRevenue = bookings.reduce((sum, booking) => sum + Number(booking.total_amount || 0), 0)
@@ -176,6 +192,60 @@ export default function AdminPage() {
     const max = Math.max(...months.map((item) => item.count), 1)
     return months.map((item) => ({ ...item, height: Math.max(12, (item.count / max) * 160) }))
   }, [bookings])
+
+  const conversationUsers = useMemo(() => {
+    const userIds = new Set<string>()
+
+    profiles
+      .filter((profile) => profile.role !== 'admin')
+      .forEach((profile) => userIds.add(profile.id))
+    messages.forEach((message) => userIds.add(message.user_id))
+
+    return Array.from(userIds)
+      .map((id) => {
+        const profile = profiles.find((item) => item.id === id)
+        const thread = messages.filter((message) => message.user_id === id)
+        const latest = thread[thread.length - 1]
+        const unread = thread.filter(
+          (message) => message.sender_role === 'user' && !message.read_by_admin
+        ).length
+        const displayName = profile?.full_name || profile?.email || `User ${id.slice(0, 8)}`
+        const contact = profile?.email || profile?.phone || 'No contact saved'
+
+        return {
+          id,
+          displayName,
+          contact,
+          latest,
+          unread,
+          createdAt: profile?.created_at || latest?.created_at || '',
+        }
+      })
+      .filter((item) => {
+        const query = conversationSearch.trim().toLowerCase()
+        if (!query) return true
+        return (
+          item.displayName.toLowerCase().includes(query) ||
+          item.contact.toLowerCase().includes(query)
+        )
+      })
+      .sort((a, b) => {
+        const aTime = new Date(a.latest?.created_at || a.createdAt || 0).getTime()
+        const bTime = new Date(b.latest?.created_at || b.createdAt || 0).getTime()
+        return bTime - aTime
+      })
+  }, [conversationSearch, messages, profiles])
+
+  const selectedUser =
+    conversationUsers.find((user) => user.id === selectedUserId) ||
+    conversationUsers[0] ||
+    null
+
+  useEffect(() => {
+    if (!selectedUserId && conversationUsers.length > 0) {
+      setSelectedUserId(conversationUsers[0].id)
+    }
+  }, [conversationUsers, selectedUserId])
 
   const sendReply = async () => {
     const trimmed = reply.trim()
@@ -350,7 +420,7 @@ export default function AdminPage() {
         </section>
 
         <section className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-          <div className="xl:col-span-8 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden">
+          <div className="xl:col-span-12 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden">
             <div className="p-6 border-b border-outline-variant">
               <h2 className="text-xl font-bold text-primary">Users and Bought Plots</h2>
               <p className="text-sm text-on-surface-variant mt-1">
@@ -424,83 +494,199 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="xl:col-span-4 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-outline-variant">
-              <h2 className="text-xl font-bold text-primary">Message User</h2>
-              <p className="text-sm text-on-surface-variant mt-1">
-                Local support chat between admin and user.
-              </p>
+          <div className="xl:col-span-12 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-outline-variant flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-primary">Support Inbox</h2>
+                <p className="text-sm text-on-surface-variant mt-1">
+                  Receive user messages and reply like a private messenger thread.
+                </p>
+              </div>
+              <div className="bg-secondary-container text-on-secondary-container px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-2">
+                <span className="material-symbols-outlined text-sm">forum</span>
+                {messages.filter((message) => message.sender_role === 'user' && !message.read_by_admin).length} unread
+              </div>
             </div>
-            <div className="p-4 border-b border-outline-variant">
-              <select
-                value={selectedUserId}
-                onChange={(event) => setSelectedUserId(event.target.value)}
-                className="w-full border border-outline-variant rounded-lg px-3 py-3 text-sm bg-white outline-none focus:ring-2 focus:ring-secondary"
-              >
-                <option value="">Select a user</option>
-                {profiles
-                  .filter((profile) => profile.role !== 'admin')
-                  .map((profile) => (
-                    <option key={profile.id} value={profile.id}>
-                      {profile.full_name || profile.email || profile.id}
-                    </option>
-                  ))}
-              </select>
-            </div>
-            <div className="h-80 overflow-y-auto p-4 bg-surface-container-low">
-              {!selectedUserId ? (
-                <div className="h-full flex items-center justify-center text-sm text-on-surface-variant text-center">
-                  Select a user to view messages.
+
+            <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] min-h-[620px]">
+              <aside className="border-b lg:border-b-0 lg:border-r border-outline-variant bg-surface-container-lowest">
+                <div className="p-4 border-b border-outline-variant">
+                  <div className="relative">
+                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]">
+                      search
+                    </span>
+                    <input
+                      value={conversationSearch}
+                      onChange={(event) => setConversationSearch(event.target.value)}
+                      placeholder="Search users..."
+                      className="w-full pl-10 pr-4 py-3 rounded-lg border border-outline-variant text-sm outline-none focus:ring-2 focus:ring-secondary focus:border-secondary"
+                    />
+                  </div>
                 </div>
-              ) : selectedMessages.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-sm text-on-surface-variant text-center">
-                  No messages with {selectedUser?.full_name || 'this user'} yet.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {selectedMessages.map((message) => {
-                    const adminMessage = message.sender_role === 'admin'
-                    return (
-                      <div
-                        key={message.id}
-                        className={`flex ${adminMessage ? 'justify-end' : 'justify-start'}`}
-                      >
-                        <div
-                          className={`max-w-[82%] rounded-xl px-3 py-2 text-sm ${
-                            adminMessage
-                              ? 'bg-primary text-on-primary'
-                              : 'bg-surface-container-lowest border border-outline-variant text-on-surface'
+
+                <div className="h-[320px] lg:h-[560px] overflow-y-auto">
+                  {conversationUsers.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center px-6 text-on-surface-variant">
+                      <span className="material-symbols-outlined text-5xl mb-3">person_search</span>
+                      <p className="font-semibold text-primary">No users yet</p>
+                      <p className="text-sm mt-1">Registered users and incoming messages will appear here.</p>
+                    </div>
+                  ) : (
+                    conversationUsers.map((user) => {
+                      const active = user.id === selectedUserId
+                      return (
+                        <button
+                          key={user.id}
+                          onClick={() => setSelectedUserId(user.id)}
+                          className={`w-full text-left p-4 border-b border-outline-variant transition-colors ${
+                            active
+                              ? 'bg-secondary-container/40'
+                              : 'hover:bg-surface-container-low'
                           }`}
                         >
-                          <p className="text-[11px] font-bold mb-1">
-                            {adminMessage ? 'Admin' : selectedUser?.full_name || 'User'}
-                          </p>
-                          <p className="whitespace-pre-wrap">{message.body}</p>
-                        </div>
-                      </div>
-                    )
-                  })}
+                          <div className="flex gap-3">
+                            <div className="relative flex-shrink-0">
+                              <div className="w-11 h-11 rounded-full bg-primary text-on-primary flex items-center justify-center font-bold">
+                                {user.displayName[0]?.toUpperCase() || 'U'}
+                              </div>
+                              {user.unread > 0 && (
+                                <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-error text-on-error text-[11px] font-bold flex items-center justify-center">
+                                  {user.unread}
+                                </span>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-bold text-primary truncate">
+                                  {user.displayName}
+                                </p>
+                                {user.latest && (
+                                  <span className="text-[11px] text-on-surface-variant flex-shrink-0">
+                                    {new Date(user.latest.created_at).toLocaleDateString('en-PH', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                    })}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-on-surface-variant truncate mt-0.5">
+                                {user.latest
+                                  ? `${user.latest.sender_role === 'admin' ? 'You: ' : ''}${user.latest.body}`
+                                  : user.contact}
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })
+                  )}
                 </div>
-              )}
-            </div>
-            <div className="p-4 border-t border-outline-variant">
-              <div className="flex gap-2">
-                <textarea
-                  rows={2}
-                  value={reply}
-                  onChange={(event) => setReply(event.target.value)}
-                  placeholder="Reply to user..."
-                  className="flex-1 resize-none border border-outline-variant rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-secondary"
-                />
-                <button
-                  onClick={sendReply}
-                  disabled={!selectedUserId || !reply.trim() || isSending}
-                  className="w-12 rounded-lg bg-primary text-on-primary flex items-center justify-center disabled:opacity-50"
-                  title="Send"
-                >
-                  <span className="material-symbols-outlined">send</span>
-                </button>
-              </div>
+              </aside>
+
+              <section className="flex flex-col bg-surface-container-low min-h-[620px]">
+                <div className="px-5 py-4 border-b border-outline-variant bg-surface-container-lowest flex items-center justify-between gap-4">
+                  {selectedUser ? (
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center font-bold flex-shrink-0">
+                        {selectedUser.displayName[0]?.toUpperCase() || 'U'}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-primary truncate">{selectedUser.displayName}</p>
+                        <p className="text-xs text-on-surface-variant truncate">{selectedUser.contact}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-on-surface-variant">Select a user</p>
+                  )}
+                  <span className="material-symbols-outlined text-secondary">support_agent</span>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 md:p-6">
+                  {!selectedUserId ? (
+                    <div className="h-full flex items-center justify-center text-sm text-on-surface-variant text-center">
+                      Choose a user from the left to open the message thread.
+                    </div>
+                  ) : selectedMessages.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-sm text-on-surface-variant text-center">
+                      <span className="material-symbols-outlined text-5xl mb-3">chat</span>
+                      <p className="font-semibold text-primary">No messages yet</p>
+                      <p className="mt-1">Send a message to start support with {selectedUser?.displayName || 'this user'}.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {selectedMessages.map((message) => {
+                        const adminMessage = message.sender_role === 'admin'
+                        return (
+                          <div
+                            key={message.id}
+                            className={`flex ${adminMessage ? 'justify-end' : 'justify-start'}`}
+                          >
+                            <div
+                              className={`max-w-[76%] rounded-xl px-4 py-3 shadow-sm ${
+                                adminMessage
+                                  ? 'bg-primary text-on-primary'
+                                  : 'bg-surface-container-lowest border border-outline-variant text-on-surface'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xs font-bold">
+                                  {adminMessage ? 'Admin' : selectedUser?.displayName || 'User'}
+                                </span>
+                                <span
+                                  className={
+                                    adminMessage
+                                      ? 'text-white/60 text-[11px]'
+                                      : 'text-on-surface-variant text-[11px]'
+                                  }
+                                >
+                                  {new Date(message.created_at).toLocaleString('en-PH', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                  })}
+                                </span>
+                              </div>
+                              <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.body}</p>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      <div ref={chatEndRef} />
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-4 border-t border-outline-variant bg-surface-container-lowest">
+                  <div className="flex gap-3">
+                    <textarea
+                      rows={2}
+                      value={reply}
+                      onChange={(event) => setReply(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' && !event.shiftKey) {
+                          event.preventDefault()
+                          sendReply()
+                        }
+                      }}
+                      placeholder={
+                        selectedUser
+                          ? `Message ${selectedUser.displayName}...`
+                          : 'Select a user first...'
+                      }
+                      className="flex-1 resize-none border border-outline-variant rounded-lg px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-secondary focus:border-secondary"
+                    />
+                    <button
+                      onClick={sendReply}
+                      disabled={!selectedUserId || !reply.trim() || isSending}
+                      className="w-14 rounded-lg bg-primary text-on-primary flex items-center justify-center hover:bg-primary-container disabled:opacity-50 transition-colors"
+                      title="Send"
+                    >
+                      <span className="material-symbols-outlined">send</span>
+                    </button>
+                  </div>
+                </div>
+              </section>
             </div>
           </div>
         </section>

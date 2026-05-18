@@ -1,10 +1,12 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { SupportMessage } from '@/types'
 
 export default function SupportPage() {
+  const router = useRouter()
   const supabase = createClient()
   const bottomRef = useRef<HTMLDivElement>(null)
   const [userId, setUserId] = useState('')
@@ -20,6 +22,23 @@ export default function SupportPage() {
     } = await supabase.auth.getUser()
 
     if (!user) return
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    const isAdmin =
+      profile?.role === 'admin' ||
+      user.user_metadata?.role === 'admin' ||
+      user.email?.toLowerCase() === 'admin@cemetery.com'
+
+    if (isAdmin) {
+      router.replace('/admin')
+      return
+    }
+
     setUserId(user.id)
 
     const { data, error } = await supabase

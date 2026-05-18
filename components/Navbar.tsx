@@ -59,9 +59,8 @@ export default function Navbar({ userInitials, isAdmin }: NavbarProps) {
   const navLinks = [
     { href: '/map', label: 'Map' },
     { href: '/booking', label: 'Booking' },
-    { href: '/support', label: 'Support' },
+    isAdmin ? { href: '/admin', label: 'Inbox' } : { href: '/support', label: 'Support' },
     { href: '/profile', label: 'Profile' },
-    ...(isAdmin ? [{ href: '/admin', label: 'Admin' }] : []),
   ]
 
   const openNotifications = async () => {
